@@ -34,21 +34,38 @@ def normalize(phase_image,sigma):
 
     return adjusted_phase
 
-ds_real = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/all_real.npy')
-ds_img = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/all_img.npy')
-slope_real = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/real_rescale_slope.npy')
-int_real = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/real_rescale_intercept.npy')
-slope_img = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/img_rescale_slope.npy')
-int_img = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/img_rescale_intercept.npy')
+ds_real = np.load('./output/all_real.npy')
+ds_img = np.load('./output/all_img.npy')
+slope_real = np.load('./output/real_rescale_slope.npy')
+int_real = np.load('./output/real_rescale_intercept.npy')
+slope_img = np.load('./output/img_rescale_slope.npy')
+int_img = np.load('./output/img_rescale_intercept.npy')
 
-ds_phase = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/all_phase.npy')
-slope_phase = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/phase_rescale_slope.npy')
-int_phase = np.load('D:/HW/Y4T1/fyp/git/MRTI-phase-temperature-conversion/output2/phase_rescale_intercept.npy')
+ds_phase = np.load('./output/all_phase.npy')
+slope_phase = np.load('./output/phase_rescale_slope.npy')
+int_phase = np.load('./output/phase_rescale_intercept.npy')
 
 ds_real_rescale = rescale(ds_real,slope_real,int_real) # change unit into rad
 ds_img_rescale = rescale(ds_img,slope_img,int_img) # change unit into rad
 ds_phase_rescale = rescale(ds_phase,slope_phase,int_phase)
 
+#38 to 34
+image_pre_1_real = ds_real_rescale[10:20,:,:]
+image_cooldown_1_real = ds_real_rescale[20:30,:,:]
+image_pre_1_img = ds_img_rescale[10:20,:,:]
+image_cooldown_1_img = ds_img_rescale[20:30,:,:]
+image_pre_phase = ds_phase_rescale[10:20,:,:]
+image_cooldown_phase = ds_phase_rescale[20:30,:,:]
+
+#32 to 28
+image_pre_2_real = ds_real_rescale[30:40,:,:]
+image_cooldown_2_real = ds_real_rescale[40:50,:,:]
+image_pre_2_img = ds_img_rescale[30:40,:,:]
+image_cooldown_2_img = ds_img_rescale[40:50,:,:]
+image_pre_phase_2 = ds_phase_rescale[30:40,:,:]
+image_cooldown_phase_2 = ds_phase_rescale[40:50,:,:]
+
+'''
 # temp 58-54
 image_pre_1_real = ds_real_rescale[0:7,:,:]
 image_cooldown_1_real = ds_real_rescale[7:14,:,:]
@@ -72,43 +89,45 @@ image_pre_3_img = ds_img_rescale[21:28,:,:]
 image_cooldown_3_img = ds_img_rescale[63:70,:,:]
 image_pre_phase_3 = ds_phase_rescale[21:28,:,:]
 image_cooldown_phase_3 = ds_phase_rescale[63:70,:,:]
-
+'''
 
 
 phase_diff_1 = cal_phase_diff(image_pre_1_real,image_pre_1_img,image_cooldown_1_real,image_cooldown_1_img)
 phase_diff_2 = cal_phase_diff(image_pre_2_real,image_pre_2_img,image_cooldown_2_real,image_cooldown_2_img)
-phase_diff_3 = cal_phase_diff(image_pre_3_real,image_pre_3_img,image_cooldown_3_real,image_cooldown_3_img)
 
-phase_diff_adjusted_1 = normalize(phase_diff_1,2)
-phase_diff_adjusted_2 = normalize(phase_diff_2,2)
-phase_diff_adjusted_3 = normalize(phase_diff_3,2)
+phase_diff_adjusted_1 = normalize(phase_diff_1,1.5)
+phase_diff_adjusted_2 = normalize(phase_diff_2,1.5)
 
 temp_diff_1 = phase_diff_adjusted_1 / (alpha*gyro_mag_ratio*magnetic_field_0*echo_time)
 temp_diff_2 = phase_diff_adjusted_2 / (alpha*gyro_mag_ratio*magnetic_field_0*echo_time)
-temp_diff_3 = phase_diff_adjusted_3 / (alpha*gyro_mag_ratio*magnetic_field_0*echo_time)
 
-fig, ((ax1,ax2,ax3,ax4),(ax5,ax6,ax7,ax8)) = plt.subplots(2,4)
+fig, ((ax1,ax2,ax3,ax4,ax5),(ax6,ax7,ax8,ax9,ax10)) = plt.subplots(2,5)
 
-im1 = ax1.imshow(temp_diff_3[0])
+im1 = ax1.imshow(phase_diff_adjusted_1[0])
 cbar1 = fig.colorbar(im1, ax=ax1)
-im2 = ax2.imshow(temp_diff_3[1])
+im2 = ax2.imshow(phase_diff_adjusted_1[1])
 cbar2 = fig.colorbar(im2, ax=ax2)
-im3 = ax3.imshow(temp_diff_3[2])
+im3 = ax3.imshow(phase_diff_adjusted_1[2])
 cbar3 = fig.colorbar(im3, ax=ax3)
-im4 = ax4.imshow(temp_diff_3[3])
+im4 = ax4.imshow(phase_diff_adjusted_1[3])
 cbar4 = fig.colorbar(im4, ax=ax4)
-im5 = ax5.imshow(temp_diff_3[4])
+im5 = ax5.imshow(phase_diff_adjusted_1[4])
 cbar5 = fig.colorbar(im5, ax=ax5)
-im6 = ax6.imshow(temp_diff_3[5])
+im6 = ax6.imshow(phase_diff_adjusted_1[5])
 cbar6 = fig.colorbar(im6, ax=ax6)
-im7 = ax7.imshow(temp_diff_3[6])
-#cbar7 = fig.colorbar(im7, ax=ax7)
-#im8 = ax8.imshow(temp_diff_1[7])
-#cbar8 = fig.colorbar(im8, ax=ax8)
-#im9 = ax9.imshow(temp_diff_1[8])
-#cbar9 = fig.colorbar(im9, ax=ax9)
-#im10 = ax10.imshow(temp_diff_1[9])
-#cbar10 = fig.colorbar(im10, ax=ax10)
+im7 = ax7.imshow(phase_diff_adjusted_1[6])
+cbar7 = fig.colorbar(im7, ax=ax7)
+im8 = ax8.imshow(phase_diff_adjusted_1[7])
+cbar8 = fig.colorbar(im8, ax=ax8)
+im9 = ax9.imshow(phase_diff_adjusted_1[8])
+cbar9 = fig.colorbar(im9, ax=ax9)
+im10 = ax10.imshow(phase_diff_adjusted_1[9])
+cbar10 = fig.colorbar(im10, ax=ax10)
+
+#fig.savefig('temp_diff_2.png')
+plt.show()
+
+
 
 #plt.imshow(temp_diff_1[0])
 

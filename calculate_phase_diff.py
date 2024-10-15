@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pylab as plt
 from pydicom.data import get_testdata_files
 import os
-import napari
+#import napari
 
 echo_time = 0.017 #ms
 magnetic_field_0 = 3 # T
@@ -55,9 +55,9 @@ with open('temp_diff.txt', 'w') as outfile:
 
 #np.savetxt('temp_diff.csv', temp_diff_1, delimiter=',') 
 #requrie napari 
-viewer = napari.Viewer()
-viewer.add_image(temp_diff_1, name='temp_diff')
-napari.run()
+#viewer = napari.Viewer()
+#viewer.add_image(temp_diff_1, name='temp_diff')
+#napari.run()
 
 
 #ax = plt.figure().add_subplot(projection='3d')
