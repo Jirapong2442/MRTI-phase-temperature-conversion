@@ -1,0 +1,265 @@
+function  temp_map(rect_pos,rect_pos_2, number_of_slices,path,path_hi,save_file,output_name,manual_unwrap,drift_corr,rename,magnetic_field_0,alpha,gyro_mag_ratio )
+%% main
+%   PRFS-based thermometry with N-echo GRE sequence temperature processing
+%
+%   This file contains the reference implementation of the implementation
+%   of N-echo GRE sequence temperature processing.
+% 
+%   The algorithm was implemented by first load the data, unwrap [1] and
+%   calculate temperature difference from each TE. The calculated temperature
+%   then weighted with an average of normalized (TE - |m|)^2 as addressed in [2]
+%
+%   input parameters
+%       - rect_pos: ROI to calculate temperature difference
+%       - rect_pos_2: ROI of reference point (background)
+%       - number_of_slices: number of slices
+%       - path & path_hi: path to folder containing Magnitude, Real, Imaginary, and Phase
+%           image in DICOM format of all echo at the same temperature
+%           -> temp = 50 degree celcius
+%               -> slice1 echo1 (M), slice1 echo2 (M), ... , slice 1 echoN (M)
+%                   slice2 ... sliceN echoN (M)
+%                   slice1 echo1 (R) ....
+%                   sliceN echoN (P)
+%       - save_file: if true: save the output temperature map image (see
+%       output)
+%       - filename: savefile name
+%       - rename: if true, rewrap data if it is more than limit 
+%               -> 2048 , 1 , 2 to 2048 , 2049 , 2050 ...
+%       - manual unwrap: if true, unwrap data in ROI
+%       - drift correction: if true require a model drift data imported
+%       - main magnetic field
+%       - PRF Coefficient
+%       - gyromagnetic ratio
+
+%   output (if save_file == true)
+%       - image file of temperature map
+%       - .mat file containing mean, std, phase, and snr of the region of interest
+%
+%   This algorithm was designed and implemented by Jirapong SAELOR.
+%
+%   [1] M. A. Herráez, D. R. Burton, M. J. Lalor, and M. A. Gdeisat, 
+%   "Fast two-dimensional phase-unwrapping algorithm based on sorting by reliability following a noncontinuous path", 
+%   Applied Optics, Vol. 41, Issue 35, pp. 7437-7444 (2002),
+%
+%   [2] H. Odéen and D. L. Parker, "Improved MR thermometry for laser interstitial thermotherapy," Lasers 
+%   in Surgery and Medicine, vol. 51, no. 3, pp. 286–300, Jan. 2019. doi:10.1002/lsm.23049  
+
+    
+    %% import data
+    % limit = pi / -0.1364 = 23.0271
+    if nargin < 11
+        magnetic_field_0 = 3 ;
+        alpha = -0.01 ;
+        gyro_mag_ratio = 267.522187 ;
+    end
+
+    if nargin < 8
+        drift_corr = false;
+        rename = false;
+        manual_unwrap = true;
+    end
+    
+    if (rename == true)
+        rewrite_name(24,path_hi);
+    end
+    
+    [mag_im,phase_im,real_im,img_im,echo] = read_im(path);
+    [mag_im_hi,phase_im_hi,real_im_hi,img_im_hi,echo_hi] = read_im(path_hi);
+
+    circle_ = [rect_pos(1)+rect_pos(3)/2 rect_pos(2)+rect_pos(3)/2 rect_pos(3)/2];
+    
+    %% separate image by its echo time and slice location
+    num_echo = length(echo); 
+    
+    mag_all = sort_im(mag_im,num_echo,number_of_slices);
+    phase_all = sort_im(phase_im,num_echo,number_of_slices);
+    real_all = sort_im(real_im,num_echo,number_of_slices);
+    img_all = sort_im(img_im,num_echo,number_of_slices);
+    
+    mag_all_hi = sort_im(mag_im_hi,num_echo,number_of_slices);
+    phase_all_hi = sort_im(phase_im_hi,num_echo,number_of_slices);
+    real_all_hi = sort_im(real_im_hi,num_echo,number_of_slices);
+    img_all_hi = sort_im(img_im_hi,num_echo ,number_of_slices);
+    
+    field = fieldnames(mag_all);
+    
+    %% unwrapping, and temperature mapping
+    
+    phase_unwrap = struct();
+    phase_unwrap_hi = struct();
+    phase_diff_all = struct();
+    mag_diff_all = struct();
+    temp_diff_all = struct();
+    
+    for i=1:length(field)
+        name = field{i};
+        et = echo{i};
+    
+        %phase unwrap
+        phase_unwrap.(name) = unwrap_(mag_all.(name), phase_all.(name));
+        phase_unwrap_hi.(name) = unwrap_(mag_all_hi.(name), phase_all_hi.(name));
+    
+       %complex subtraction
+       [real_all.(name), img_all.(name)] = getRealImag(mag_all.(name),phase_unwrap.(name));
+       [real_all_hi.(name), img_all_hi.(name)] = getRealImag(mag_all_hi.(name),phase_unwrap_hi.(name));  
+       [phase_diff_all.(name), mag_diff_all.(name)] = complexSub(real_all_hi.(name), img_all_hi.(name),real_all.(name), img_all.(name));
+        
+       %subplot(1,2,1)
+       %imagesc(phase_diff_all.(name){1, 1});
+       % temperature mapping 
+       for j = 1:length(phase_diff_all.(name))
+           if(manual_unwrap == true)
+                submatrix = phase_diff_all.(name){1, j}(rect_pos(2):rect_pos(2)+rect_pos(4), rect_pos(1):rect_pos(1)+rect_pos(3)); 
+                if (drift_corr)
+                    mask = (submatrix < - mean_drift - 0.1); %change here
+                else
+                    mask = (submatrix < -0.1);
+                end
+                submatrix(mask) = submatrix(mask) + (2*pi) ;
+    
+                %subplot(1,2,2)
+                %imagesc(submatrix);
+                phase_diff_all.(name){1, j}(rect_pos(2):rect_pos(2)+rect_pos(4), rect_pos(1):rect_pos(1)+rect_pos(3)) = submatrix;
+            end
+            
+            temp_diff =  phase_diff_all.(name){1, j}./ (alpha*gyro_mag_ratio*magnetic_field_0*et) ;
+            %mask = (temp_diff > -40) & (temp_diff < 40);
+            temp_diff_masked = temp_diff;
+            %temp_diff_masked(~mask) = 0;
+            temp_diff_all.(name){1, j} = temp_diff_masked;  
+       end
+    end
+    
+    
+    %% weighted by TE
+    % magnitude of the phase diff
+    weight_all = struct();
+    for i=1:length(field)
+        et = echo{i};
+        name = field{i};
+        test_mag = mag_diff_all.(name);
+        weight_all.(name) = cellfun(@(mag) (mag.*(et/1000)).^2,test_mag,'UniformOutput', false );
+    end
+    
+    %% calcualte normalize weight
+    nCells = numel(weight_all.(field{1}));
+    weighted_temperature = cell(1, nCells);
+    weighted_phase = cell(1, nCells);
+    
+    % Preallocate output
+    for i = 1:num_echo
+        weight_norm.(field{i}) = cell(1,nCells);
+    end
+    
+    % Loop over each map (cell) j
+    for j = 1:nCells
+        % 1) compute voxel-wise denominator
+        sumW = zeros(size(weight_all.(field{1}){j}));
+        for i = 1:num_echo
+            sumW = sumW + weight_all.(field{i}){j};
+        end
+    
+        %sumW(sumW==0) = 1;  % avoid div-by-zero
+        mask = (sumW > 0);
+        for i = 1:num_echo
+            name = field{i};
+            w = weight_all.(name){j};
+            w_norm = zeros(size(w));      % default zero
+            w_norm(mask) = w(mask) ./ sumW(mask);
+            weight_norm.(name){j} = w_norm; % weight of same slices across all TE same slice j
+    
+            w_temp = temp_diff_all.(name){1,j} .* w_norm ;
+            w_phase = phase_diff_all.(name){1, j}.* w_norm;
+    
+            if i == 1
+                weighted_temperature{1,j} = w_temp;
+                weighted_phase{1,j} = w_phase;
+            else
+                weighted_temperature{1,j} = weighted_temperature{1,j} + w_temp;
+                weighted_phase{1,j} = weighted_phase{1,j} + w_phase;
+            end
+        end
+    end
+    
+    %% show results
+    % region of probe = 0 whereas background = 1
+    image_ = weighted_temperature;
+    image_phase = weighted_phase;
+    
+    mask_bg = generateMask_circle(circle_, image_{1,1}, "background", true );
+    mask_fg = generateMask_circle(circle_, image_{1,1}, "foreground", true );
+    
+    %mask_bg = generateMask(rect_pos, temp_map{1,1}, "background", true );
+    %mask_bg = generateMask(rect_pos_2, mask_bg, "background", false );
+    %region of probe = 1, background = 0
+    %mask_fg = generateMask(rect_pos, temp_map{1,1}, "foreground", true );
+    
+    mean_ = {}; 
+    std_ = {};
+    phase_ = {};
+    snr = {}; 
+    
+    for i = 1:length(image_)
+        subplot(2, 4, i);  % Create a subplot
+    
+        % apply mask to image calculate the    
+        bg = image_{1,i};
+        probe = image_{1,i};
+        probe_phase = image_phase{1,i};
+    
+        probe_phase(mask_fg == 0) =NaN;
+        probe(mask_fg==0) = NaN;
+        bg(mask_bg == 0) = NaN;
+    
+        % Calculate the mean value of the region
+        %mean_val = mean(temp_map{1,i}( 140:140+65, 220:220+70), "all");
+        mean_val = mean(probe(~(isnan(probe))),"all");
+        std_val = std(probe(~(isnan(probe))));
+    
+        %phase value of the probe
+        phase_val = mean(probe_phase(~(isnan(probe_phase))),"all");
+    
+        std_bg = std(bg(~(isnan(bg))));
+        snr_val = -mean_val / std_bg;
+        
+        snr_db = 10*log10(snr_val);
+    
+        imagesc(image_{1,i});
+        %imagesc(image_phase{1,i}); % for without unwrap
+        rectangle('Position',rect_pos,Curvature=[1,1])
+        rectangle('Position',rect_pos_2, Curvature = [1,1])
+            
+        % Calculate the mean value of the region
+        text(10, 20, ['Mean: ', num2str(mean_val, '%.3f'), '°C'], ...
+        'Color', 'black', 'FontSize', 12, 'FontWeight', 'bold');
+        title(['Image ', num2str(i)]);
+    
+        text(10, 50, ['SNR: ', num2str(snr_db, '%.3f'), ' db'], ...
+        'Color', 'black', 'FontSize', 12, 'FontWeight', 'bold');
+        title(['Image ', num2str(i)]);
+        
+        if(drift_corr)
+            text(10, 80, ['Drift: ', num2str(mean_drift, '%.3f'), 'rad'], ...
+            'Color', 'black', 'FontSize', 12, 'FontWeight', 'bold');
+            title(['Image ', num2str(i)]);
+        end
+        
+        h = colorbar;
+        mean_{end+1} = mean_val;
+        std_{end+1} = std_val;
+        phase_{end+1} = phase_val;
+        snr{end+1} = snr_db;
+    end
+    dcm = datacursormode;
+    dcm.Enable = 'on';
+    dcm.DisplayStyle = 'window';
+    
+    %% save file
+    if save_file == true
+        img_name = strcat(num2str(output_name) , '.png') ; 
+        saveas(gcf,img_name) ;
+        save( output_name + ".mat" ,"mean_","std_", "phase_","snr");
+    end
+
+end
+
